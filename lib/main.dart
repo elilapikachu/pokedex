@@ -15,17 +15,15 @@ class MyPokemonApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Pokemon',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePagePokemon(title: 'Pokemon'),
+      home: const MyHomePagePokemon(),
     );
   }
 }
 
 class MyHomePagePokemon extends StatefulWidget {
-  const MyHomePagePokemon({super.key, required this.title});
-  final String title;
+  const MyHomePagePokemon({super.key});
 
   @override
   State<MyHomePagePokemon> createState() => _MyHomePageState();
@@ -33,18 +31,33 @@ class MyHomePagePokemon extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePagePokemon> {
   List<dynamic> pokemonList = [];
+  List<dynamic> typeList = [];
   int currentPage = 0;
   bool isLoading = false;
   bool hasMore = true;
   final int limit = 20;
+  String? selectedType;
 
   @override
   void initState() {
     super.initState();
-    fetchPokemon(); // Carga inicial
+    fetchPokemon();
+    fetchTypes();
   }
 
-  Future<void> fetchPokemon() async {
+  Future<void> fetchTypes() async {
+    final response =
+        await http.get(Uri.parse('https://pokeapi.co/api/v2/type'));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      setState(() {
+        typeList = data['results'];
+      });
+    }
+  }
+
+  Future<void> fetchPokemon([String? type]) async {
     if (isLoading || !hasMore) return;
 
     setState(() {
@@ -52,18 +65,31 @@ class _MyHomePageState extends State<MyHomePagePokemon> {
     });
 
     final int offset = currentPage * limit;
-    final response = await http.get(Uri.parse('https://pokeapi.co/api/v2/pokemon?limit=$limit&offset=$offset'));
+    String url = type != null
+        ? 'https://pokeapi.co/api/v2/type/$type'
+        : 'https://pokeapi.co/api/v2/pokemon?limit=$limit&offset=$offset';
+
+    final response = await http.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
+
       setState(() {
-        pokemonList = data['results'];
-        isLoading = false;
-        if (data['results'].length < limit) {
-          hasMore = false; // No hay más datos si el número de resultados es menor al límite
+        if (type != null) {
+          // Filtrado por tipo y paginado manual
+          final allPokemonByType =
+              data['pokemon'].map((p) => p['pokemon']).toList();
+          final paginatedPokemon =
+              allPokemonByType.skip(offset).take(limit).toList();
+          pokemonList = paginatedPokemon;
+          hasMore = paginatedPokemon.length == limit &&
+              offset + limit < allPokemonByType.length;
         } else {
-          hasMore = true;
+          // Lista completa sin filtro
+          pokemonList = data['results'];
+          hasMore = data['results'].length == limit;
         }
+        isLoading = false;
       });
     } else {
       setState(() {
@@ -72,22 +98,57 @@ class _MyHomePageState extends State<MyHomePagePokemon> {
     }
   }
 
-  void nextPage() {
-    if (hasMore) {
-      setState(() {
-        currentPage++;
-      });
-      fetchPokemon();
-    }
+  // filtrar por tipo
+  void filterByType(String? type) {
+    setState(() {
+      selectedType = type;
+      currentPage = 0;
+      pokemonList.clear();
+      hasMore = true;
+    });
+    fetchPokemon(type);
   }
 
-  void previousPage() {
-    if (currentPage > 0) {
-      setState(() {
-        currentPage--;
-        hasMore = true; // Habilitar la carga de más elementos si retrocedemos
-      });
-      fetchPokemon();
+  Color getTypeColor(String type) {
+    switch (type) {
+      case 'normal':
+        return Colors.brown[400]!;
+      case 'fire':
+        return Colors.redAccent;
+      case 'water':
+        return Colors.blueAccent;
+      case 'electric':
+        return Colors.amber;
+      case 'grass':
+        return Colors.green;
+      case 'ice':
+        return Colors.cyanAccent[100]!;
+      case 'fighting':
+        return Colors.orange;
+      case 'poison':
+        return Colors.purple;
+      case 'ground':
+        return Colors.brown;
+      case 'flying':
+        return Colors.indigoAccent;
+      case 'psychic':
+        return Colors.pinkAccent;
+      case 'bug':
+        return Colors.lightGreen[700]!;
+      case 'rock':
+        return Colors.grey;
+      case 'ghost':
+        return Colors.indigo;
+      case 'dragon':
+        return Colors.deepPurpleAccent;
+      case 'dark':
+        return Colors.brown[800]!;
+      case 'steel':
+        return Colors.blueGrey;
+      case 'fairy':
+        return Colors.pink[200]!;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -95,13 +156,55 @@ class _MyHomePageState extends State<MyHomePagePokemon> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'lib/assets/images/logo.png',
+                height: 40,
+              ),
+              const SizedBox(
+                  width:
+                      10), //espacio que se tiene encuenta entre los elementos
+              const Text(
+                'Pokedex',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          )),
       body: pokemonList.isEmpty && isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                SizedBox(
+                  height: 50,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: typeList.length,
+                    itemBuilder: (context, index) {
+                      final type = typeList[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: getTypeColor(type['name']),
+                          ),
+                          onPressed: () => filterByType(type['name']),
+                          child: Text(
+                            type['name'],
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.white),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 Expanded(
                   child: ListView.builder(
                     itemCount: pokemonList.length,
@@ -134,6 +237,25 @@ class _MyHomePageState extends State<MyHomePagePokemon> {
             ),
     );
   }
+
+  void nextPage() {
+    if (hasMore) {
+      setState(() {
+        currentPage++;
+      });
+      fetchPokemon(selectedType);
+    }
+  }
+
+  void previousPage() {
+    if (currentPage > 0) {
+      setState(() {
+        currentPage--;
+        hasMore = true;
+      });
+      fetchPokemon(selectedType);
+    }
+  }
 }
 
 class PokemonCard extends StatelessWidget {
@@ -160,14 +282,19 @@ class PokemonCard extends StatelessWidget {
         }
         return Card(
           child: ListTile(
-            leading: Image.network(snapshot.data ?? '', width: 50, height: 50, errorBuilder: (context, error, stackTrace) => Icon(Icons.error)),
+            leading: Image.network(snapshot.data ?? '',
+                width: 50,
+                height: 50,
+                errorBuilder: (context, error, stackTrace) =>
+                    Icon(Icons.error)),
             title: Text(pokemon['name']),
             trailing: ElevatedButton(
               onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => PokemonDetailScreen(pokemonUrl: pokemon['url']),
+                    builder: (context) =>
+                        PokemonDetailScreen(pokemonUrl: pokemon['url']),
                   ),
                 );
               },
@@ -183,7 +310,8 @@ class PokemonCard extends StatelessWidget {
 class PokemonDetailScreen extends StatelessWidget {
   final String pokemonUrl;
 
-  const PokemonDetailScreen({Key? key, required this.pokemonUrl}) : super(key: key);
+  const PokemonDetailScreen({Key? key, required this.pokemonUrl})
+      : super(key: key);
 
   Future<Map<String, dynamic>> fetchPokemonDetails() async {
     final response = await http.get(Uri.parse(pokemonUrl));
@@ -194,7 +322,7 @@ class PokemonDetailScreen extends StatelessWidget {
   }
 
   @override
-Widget build(BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Detalles del Pokémon"),
@@ -208,19 +336,16 @@ Widget build(BuildContext context) {
             final pokemonData = snapshot.data!;
             return Stack(
               children: [
-                // Fondo con GIF que ocupa toda la pantalla
                 Positioned.fill(
                   child: Image.asset(
                     'lib/assets/images/fondop.jpg',
-                    fit: BoxFit
-                        .cover, // Asegura que el GIF cubra toda la pantalla
+                    fit: BoxFit.cover,
                   ),
                 ),
-                // Contenedor con opacidad negra sobre el fondo
+                // agregamos la opacidad
                 Positioned.fill(
                   child: Container(
-                    color: Colors.black
-                        .withOpacity(0.4), // Ajusta la opacidad aquí
+                    color: Colors.black.withOpacity(0.4),
                   ),
                 ),
                 // Contenido en primer plano
@@ -231,14 +356,11 @@ Widget build(BuildContext context) {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Imagen del Pokémon más grande
                         Image.network(
                           pokemonData['sprites']['front_default'] ?? '',
-                          height:
-                              200, // Aumenta el tamaño de la imagen del Pokémon
-                          width: 200, // Asegura que la imagen sea cuadrada
-                          fit: BoxFit
-                              .contain, // Mantiene la proporción de la imagen
+                          height: 200,
+                          width: 200,
+                          fit: BoxFit.cover,
                         ),
                         const SizedBox(height: 10),
                         Text(

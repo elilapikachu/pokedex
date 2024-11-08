@@ -57,6 +57,7 @@ flutter:
 
   assets:
     - lib/assets/images/fondop.jpg
+    - lib/assets/images/logo.png
 
   # fonts:
   #   - family: Schyler
